@@ -1,0 +1,8 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+project_id = "your-gcp-project-id"
+region     = "asia-east1"  # or your preferred region
+
+# LINE Bot credentials
+channel_access_token = "your_channel_access_token_here"
+channel_secret      = "your_channel_secret_here"
