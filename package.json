@@ -1,0 +1,42 @@
+{
+  "name": "family-expense-bot",
+  "version": "1.0.0",
+  "description": "LINE bot for automated family expense tracking",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "deploy": "gcloud functions deploy family-expense-bot --source=. --entry-point=lineWebhook --runtime=nodejs20 --trigger-http --region=asia-east1 --allow-unauthenticated --env-vars-file=.env.yaml",
+    "deploy:terraform": "cd terraform && terraform apply -replace=google_cloudfunctions_function.line_webhook -auto-approve",
+    "deploy:quick": "cd terraform && terraform apply -auto-approve",
+    "deploy:plan": "cd terraform && terraform plan",
+    "deploy:destroy": "cd terraform && terraform destroy",
+    "logs": "gcloud functions logs read family-expense-bot --region=asia-east1 --limit=50",
+    "load-data": "node scripts/load-from-file.js",
+    "load-interactive": "node scripts/load-initial-data.js"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^6.8.0",
+    "@google-cloud/functions-framework": "^4.0.0",
+    "@line/bot-sdk": "^7.5.2",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.1",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "line-bot",
+    "expense-tracking",
+    "firestore",
+    "gcp"
+  ],
+  "author": "",
+  "license": "MIT"
+}

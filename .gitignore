@@ -1,0 +1,34 @@
+node_modules/
+.env
+.env.local
+.env.yaml
+*.log
+dist/
+.DS_Store
+
+# GCP credentials
+service-account-key.json
+*.pem
+
+# Terraform files
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfvars
+*.tfplan
+
+# Function deployment artifacts
+function-source.zip
+test.js
+test-webhook.js
+
+# Historical data (contains personal expense info)
+historical-data.txt
+
+# gcloud artifacts
+.gcloudignore
+
+# IDE
+.vscode/
+.idea/
