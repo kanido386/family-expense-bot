@@ -4,6 +4,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const readline = require('readline');
+const moment = require('moment-timezone');
 const ExpenseDatabase = require('../src/database');
 
 const rl = readline.createInterface({
@@ -34,8 +35,10 @@ function parseHistoricalData(text) {
         });
       }
       
-      // Start new date
-      currentDate = dateMatch[1];
+      // Convert M/D format to YYYY-MM-DD for storage
+      const displayDate = dateMatch[1]; // e.g., "8/25"
+      const currentYear = moment().year();
+      currentDate = moment(`${currentYear}/${displayDate}`, 'YYYY/M/D').format('YYYY-MM-DD'); // e.g., "2024-08-25"
       currentItems = [];
     } else {
       // This should be an item line - try to parse it
@@ -120,7 +123,9 @@ async function loadInitialData() {
     console.log('\n📋 Preview of parsed data:');
     entries.forEach(entry => {
       const total = entry.items.reduce((sum, item) => sum + item.price, 0);
-      console.log(`  ${entry.date}: ${entry.items.length} items, total: ${total}`);
+      // Convert storage format back to display format for preview
+      const displayDate = moment(entry.date, 'YYYY-MM-DD').format('M/D');
+      console.log(`  ${displayDate}: ${entry.items.length} items, total: ${total}`);
     });
 
     // Ask for confirmation

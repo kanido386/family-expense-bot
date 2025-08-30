@@ -5,6 +5,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const express = require('express');
 const { Client } = require('@line/bot-sdk');
+const moment = require('moment-timezone');
 const { parseExpenseMessage } = require('./parser');
 const ExpenseDatabase = require('./database');
 
@@ -35,13 +36,13 @@ const config = {
 const client = new Client(config);
 const database = new ExpenseDatabase();
 
-// Helper function to get date
-function getDate() {
-  const now = new Date();
-  const time = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
-  const month = time.getMonth() + 1;
-  const day = time.getDate();
-  return `${month}/${day}`;
+// Helper function to get date with year for storage, M/D for display  
+function getDateInfo() {
+  const taipeiTime = moment.tz('Asia/Taipei');
+  return {
+    storageDate: taipeiTime.format('YYYY-MM-DD'),  // "2024-08-25" for storage
+    displayDate: taipeiTime.format('M/D')          // "8/25" for display
+  };
 }
 
 // Webhook handler function (shared between Express and Cloud Functions)
@@ -109,8 +110,9 @@ async function handleTextMessage(event) {
   }
   
   try {
-    // Get current date
-    const currentDate = getDate();
+    // Get current date for storage
+    const { storageDate } = getDateInfo();
+    const currentDate = storageDate;
 
     // Always reply with confirmation, regardless of database save result
     const total = parseResult.items.reduce((sum, item) => sum + item.price, 0);
@@ -149,10 +151,14 @@ async function handleViewExpenses(replyToken) {
       return;
     }
     
-    // Format expenses in the requested format
+    // Format expenses in the requested format  
     let formattedText = '';
     for (const entry of data.entries) {
-      formattedText += `${entry.date}\n`;
+      // Use moment to convert storage format "2024-08-25" to display format "8/25"
+      const displayDate = entry.date.includes('-') 
+        ? moment(entry.date, 'YYYY-MM-DD').format('M/D')
+        : entry.date;
+      formattedText += `${displayDate}\n`;
       for (const item of entry.items) {
         formattedText += `${item.name} ${item.price}\n`;
       }
