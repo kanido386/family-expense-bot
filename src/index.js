@@ -238,137 +238,196 @@ function filterExpensesByMonth(entries, yearMonth) {
   }
 }
 
-// Format expense data for OpenAI prompt
-function formatExpensesForAI(filteredEntries) {
-  let formattedText = '';
-
+// Format expense data for OpenAI prompt with structured JSON
+function formatExpensesForAI(filteredEntries, yearMonth = null) {
   // Sort entries by date
   const sortedEntries = filteredEntries.sort((a, b) => a.date.localeCompare(b.date));
 
+  // Create structured data with item IDs for tracking
+  const structuredData = [];
+  let itemId = 1;
+
   for (const entry of sortedEntries) {
-    // Convert YYYY-MM-DD to M/D format for display
     const displayDate = moment(entry.date, 'YYYY-MM-DD').format('M/D');
-    formattedText += `${displayDate}\n`;
 
     for (const item of entry.items) {
-      formattedText += `${item.name} ${item.price}\n`;
+      structuredData.push({
+        id: itemId++,
+        date: displayDate,
+        name: item.name,
+        price: item.price
+      });
     }
   }
 
-  return formattedText.trim();
+  // Determine year and month for display
+  let year, monthNum, monthText;
+  if (yearMonth) {
+    year = yearMonth.substring(0, 4);
+    monthNum = parseInt(yearMonth.substring(4, 6));
+    monthText = `${year}年${monthNum}月`;
+  } else {
+    const now = moment.tz('Asia/Taipei');
+    year = now.format('YYYY');
+    monthNum = parseInt(now.format('M'));
+    monthText = `${year}年${monthNum}月`;
+  }
+
+  return {
+    items: structuredData,
+    totalCount: structuredData.length,
+    totalAmount: structuredData.reduce((sum, item) => sum + item.price, 0),
+    year: year,
+    monthNum: monthNum,
+    monthText: monthText
+  };
 }
 
-// Call OpenAI to organize expenses
+// Call OpenAI to organize expenses (returns structured JSON for validation)
 async function organizeExpensesWithAI(expenseData) {
-  const prompt = `參考目前有的分類：
-\`\`\`
-- 家裡煮
-- 生活用品
-- 零嘴
-- 鮮奶
-- 水果
-- 保健品
-- 機車
-- 麵包
-（當然你覺得都不合適可以另創分類，但盡可能以上面為主）
-\`\`\`
+  const { items, totalCount, totalAmount, year, monthNum, monthText } = expenseData;
 
-input 會像是：
-\`\`\`
-7/1
-鳳梨 79
-奇異果 99
-里肌肉 78
-空心菜 25
-玉米 80
-油豆腐 50
-絲瓜 30
-7/2
-里肌肉 75
-鯛魚 91
-金針菇 29
-天婦羅 56
-電費(3/18～5/15) 1133
-瓦斯 (4/12~6/11) 1032
-7/4
-地瓜12
-7/5
-鳳梨 100
-南瓜 67
-7/6
-拉麵 35
-洋蔥 100
-杏鮑菇 50
-黃金奇異果 200
-木瓜 73
-7/9
-鳳梨100
-\`\`\`
+  // Create numbered list for easy verification
+  const itemsList = items.map(item => `#${item.id}: ${item.date} ${item.name} ${item.price}`).join('\n');
 
-output 會像是：
-\`\`\`
-總共 79+99+78+25+80+50+30+75+91+29+56+1133+1032+12+100+67+35+100+50+200+73+100
+  const prompt = `你是一個記帳分類專家。請為每個項目分配一個類別，並以JSON格式返回。
 
-家裡煮 78+25+80+50+30+75+91+29+56+12+67+35+100+50
-7/1   里肌肉   78
-7/1   空心菜   25
-7/1   玉米  80
-7/1   油豆腐   50
-7/1   絲瓜  30
-7/2   里肌肉   75
-7/2   鯛魚   91
-7/2   金針菇   29
-7/2   天婦羅   56
-7/4   地瓜   12
-7/5   南瓜   67
-7/6   拉麵   35
-7/6   洋蔥   100
-7/6   杏鮑菇   50
+【輸入資料】
+共 ${totalCount} 個項目：
+${itemsList}
 
-水果 79+99+100+200+73+100
-7/1   鳳梨   79
-7/1   奇異果   99
-7/5   鳳梨   100
-7/6   黃金奇異果   200
-7/6   木瓜   73
-7/9   鳳梨   100
+【分類規則】（每個項目只能分到一個類別）
+1. 鮮奶：所有鮮奶相關產品
+2. 水果：各種水果（但不包括蔬菜）
+3. 麵包：麵包、饅頭
+4. 零嘴：餅乾、飲料、冰棒、點心、可樂
+5. 保健品：營養品、起司片、南瓜籽油
+6. 機車：加油、維修
+7. 生活用品：清潔用品、衛生紙、電費、瓦斯費、祭品、小配菜（如香菜）
+8. 家裡煮：所有食材（肉類、蔬菜、海鮮、雞蛋、調料、湯品等）
 
-生活用品 1133+1032
-7/2   電費(3/18～5/15)   1133
-7/2   瓦斯 (4/12~6/11)   1032
+【輸出格式】
+請返回JSON object，包含一個items array：
+{
+  "items": [
+    {"id": 項目編號, "category": "類別名稱"},
+    ...
+  ]
+}
 
------
+【範例】
+如果輸入是：
+#1: 7/1 鳳梨 79
+#2: 7/2 里肌肉 75
+#3: 7/3 鮮奶 100
 
-2025七月家裡開銷：1133+1032+78+25+80+50+30+75+91+29+56+12+67+35+100+50+79+99+100+200+73+100
+則返回：
+{
+  "items": [
+    {"id": 1, "category": "水果"},
+    {"id": 2, "category": "家裡煮"},
+    {"id": 3, "category": "鮮奶"}
+  ]
+}
 
-由高至低：
-生活用品 1133+1032
-家裡煮 78+25+80+50+30+75+91+29+56+12+67+35+100+50
-水果 79+99+100+200+73+100
-\`\`\`
+【重要】
+- 必須為全部 ${totalCount} 個項目分類
+- 每個項目只能分到一個類別
+- 返回JSON object with items array
+- 確保JSON格式正確
 
-別忘了，output 分類底下的細項需要按照日期來排序
-
-重要：請直接輸出結果，不要用 markdown 格式包裝，不要用 \`\`\` 包圍
-
-接下來，我會提供你新的 input，請根據範例來生成 output
-
-${expenseData}`;
+請開始分類：`;
 
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
+          role: "system",
+          content: "你是一個記帳分類專家。請仔細為每個項目分配正確的類別。每個項目只能分到一個類別。以JSON格式返回結果。"
+        },
+        {
           role: "user",
           content: prompt
         }
       ],
-      max_tokens: 2000,
+      response_format: { type: "json_object" },
       temperature: 0.1
     });
 
-    return completion.choices[0].message.content;
+    const aiResponse = completion.choices[0].message.content;
+
+    // Parse JSON response
+    let categorization;
+    try {
+      const parsed = JSON.parse(aiResponse);
+      // Handle both array and object with array property
+      categorization = Array.isArray(parsed) ? parsed : (parsed.categories || parsed.items || []);
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', aiResponse);
+      throw new Error('AI returned invalid JSON');
+    }
+
+    // Validate we have all items
+    if (categorization.length !== totalCount) {
+      console.warn(`⚠️ AI returned ${categorization.length} items, expected ${totalCount}`);
+    }
+
+    // Build categorized items map
+    const categorizedItems = {};
+    for (const cat of categorization) {
+      const item = items.find(i => i.id === cat.id);
+      if (!item) {
+        console.warn(`⚠️ Unknown item ID: ${cat.id}`);
+        continue;
+      }
+
+      const category = cat.category;
+      if (!categorizedItems[category]) {
+        categorizedItems[category] = [];
+      }
+      categorizedItems[category].push(item);
+    }
+
+    // Calculate totals and sort categories by total amount
+    const categoryTotals = {};
+    for (const [category, catItems] of Object.entries(categorizedItems)) {
+      const total = catItems.reduce((sum, item) => sum + item.price, 0);
+      categoryTotals[category] = { items: catItems, total };
+    }
+
+    // Sort categories by total (descending)
+    const sortedCategories = Object.entries(categoryTotals)
+      .sort((a, b) => b[1].total - a[1].total);
+
+    // Format output
+    let output = '';
+
+    // First line with all amounts
+    const allPrices = items.map(i => i.price).join('+');
+    output += `總共 ${allPrices}=${totalAmount}\n\n`;
+
+    // Each category section
+    for (const [category, data] of sortedCategories) {
+      const prices = data.items.map(i => i.price).join('+');
+      const total = data.total;
+      output += `${category} ${prices}=${total}\n`;
+
+      for (const item of data.items) {
+        output += `${item.date}   ${item.name}   ${item.price}\n`;
+      }
+      output += '\n';
+    }
+
+    output += '-----\n\n';
+    output += `${monthText}家裡開銷：${totalAmount}\n\n`;
+    output += '由高至低：\n';
+
+    for (const [category, data] of sortedCategories) {
+      output += `${category} ${data.total}\n`;
+    }
+
+    return output;
   } catch (error) {
     console.error('OpenAI API error:', error);
     throw error;
@@ -413,7 +472,7 @@ async function handleOrganizeExpenses(replyToken, yearMonth = null) {
     }
 
     // Format data for OpenAI
-    const formattedData = formatExpensesForAI(filteredEntries);
+    const formattedData = formatExpensesForAI(filteredEntries, yearMonth);
 
     // Call OpenAI to organize expenses
     const organizedResult = await organizeExpensesWithAI(formattedData);
